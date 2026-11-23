@@ -203,9 +203,16 @@ async def get():
 async def run_bot():
     await dp.start_polling(bot)
 
-@app.on_event("startup")
-async def startup_event():
+from contextlib import asynccontextmanager
+
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    # Запускаем бота при старте
     asyncio.create_task(run_bot())
+    yield
+    # Тут можно добавить код, который выполнится при остановке
+
+app = FastAPI(lifespan=lifespan)
 
 if __name__ == "__main__":
     port = int(os.environ.get("PORT", 8080))
