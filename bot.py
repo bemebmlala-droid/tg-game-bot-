@@ -25,14 +25,14 @@ async def cmd_start(message: Message):
     await message.answer("Привет! Нажми на кнопку ниже, чтобы сыграть в 'Угадай кто'.")
     try:
         await bot.send_game(chat_id=message.chat.id, game_short_name=GAME_SHORT_NAME)
-    except TelegramBadRequest as e:
-        await message.answer(f"Ошибка игры: {e}. Проверь, создана ли игра в BotFather.")
-
-@dp.callback_query(F.data.startswith("game_"))
+    @dp.callback_query(F.game_short_name == GAME_SHORT_NAME)
 async def process_game_callback(call: CallbackQuery):
     await bot.answer_game(
         game_short_name=GAME_SHORT_NAME,
         url=GAME_URL,
+        score=0 
+    )
+    await call.answer()
         score=0 
     )
     await call.answer()
