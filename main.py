@@ -4,20 +4,31 @@ import json
 import uvicorn
 from fastapi import FastAPI, WebSocket, WebSocketDisconnect
 from fastapi.responses import HTMLResponse
-from aiogram import Bot, Dispatcher, F
+from aiogram import Bot, Dispatcher
 from aiogram.filters import Command
 from aiogram.types import Message, InlineKeyboardMarkup, InlineKeyboardButton, WebAppInfo
+from contextlib import asynccontextmanager
 
 # ================= НАСТРОЙКИ =================
 BOT_TOKEN = os.environ.get("BOT_TOKEN")
-APP_URL = "https://tg-game-bot-4.onrender.com"
+APP_URL = "https://tg-game-bot-4.onrender.com" # Твоя ссылка
 
 bot = Bot(token=BOT_TOKEN)
 dp = Dispatcher()
-app = FastAPI()
-
 rooms = {}
 
+# --- ЗАПУСК БОТА В ФОНЕ ---
+async def run_bot():
+    await dp.start_polling(bot)
+
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    asyncio.create_task(run_bot())
+    yield
+
+app = FastAPI(lifespan=lifespan)
+
+# --- 1. КОМАНДЫ БОТА ---
 @dp.message(Command("start"))
 async def cmd_start(message: Message):
     keyboard = InlineKeyboardMarkup(inline_keyboard=[
@@ -25,12 +36,13 @@ async def cmd_start(message: Message):
     ])
     await message.answer("Привет! Нажми кнопку ниже, чтобы начать играть в 'Угадай кто' онлайн.", reply_markup=keyboard)
 
+# --- 2. ВЕБ-СОКЕТЫ (Игровая логика) ---
 @app.websocket("/ws/{room_id}/{role}")
 async def websocket_endpoint(websocket: WebSocket, room_id: str, role: str):
     await websocket.accept()
     
     if room_id not in rooms:
-        rooms[room_id] = {"p1": None, "p2": None, "target": None, "secret": None}
+        rooms[room_id] = {"p1": None, "p2": None, "target": None}
     
     if role == "p1":
         rooms[room_id]["p1"] = websocket
@@ -69,153 +81,142 @@ async def websocket_endpoint(websocket: WebSocket, room_id: str, role: str):
         if not rooms[room_id]["p1"] and not rooms[room_id]["p2"]:
             del rooms[room_id]
 
-@app.get("/")
-async def get():
-    html_content = """
-    <!DOCTYPE html>
-    <html>
-    <head>
-        <meta charset="UTF-8">
-        <meta name="viewport" content="width=device-width, initial-scale=1.0">
-        <script src="https://telegram.org/js/telegram-web-app.js"></script>
-        <style>
-            body { background: #0f172a; color: #fff; padding: 10px; font-family: sans-serif; }
-            .hidden { display: none; }
-            .grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 5px; }
-            .card { background: #1e3a8a; border: 2px solid #2563eb; border-radius: 5px; text-align: center; padding: 5px; cursor: pointer; font-size: 10px;}
-            .card img { width: 100%; height: 60px; object-fit: cover; background: #000; }
-            .correct { border-color: #22c55e !important; background: #15803d; }
-            .wrong { border-color: #ef4444 !important; opacity: 0.5; }
-            #chat { height: 150px; overflow-y: scroll; border: 1px solid #3b82f6; margin-top: 10px; padding: 5px; }
-            .btn { background: #3b82f6; color: white; padding: 10px; border: none; border-radius: 5px; cursor: pointer; margin-top: 10px; width: 100%; font-size: 16px;}
-        </style>
-    </head>
-    <body>
-        <div id="lobby">
-            <h2>Онлайн Угадай Кто</h2>
-            <button class="btn" onclick="createGame()">Создать игру</button>
-            <input type="text" id="joinId" placeholder="Введите код комнаты" style="width: 100%; padding: 10px; margin-top: 10px; box-sizing: border-box;">
-            <button class="btn" onclick="joinGame()">Присоединиться</button>
+# --- 3. HTML ФРОНТЕНД ---
+HTML_CONTENT = """
+<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <script src="https://telegram.org/js/telegram-web-app.js"></script>
+    <style>
+        body { background: #0f172a; color: #fff; padding: 10px; font-family: sans-serif; }
+        .hidden { display: none; }
+        .grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 5px; }
+        .card { background: #1e3a8a; border: 2px solid #2563eb; border-radius: 5px; text-align: center; padding: 5px; cursor: pointer; font-size: 10px;}
+        .card img { width: 100%; height: 60px; object-fit: cover; background: #000; }
+        .correct { border-color: #22c55e !important; background: #15803d; }
+        .wrong { border-color: #ef4444 !important; opacity: 0.5; }
+        #chat { height: 150px; overflow-y: scroll; border: 1px solid #3b82f6; margin-top: 10px; padding: 5px; }
+        .btn { background: #3b82f6; color: white; padding: 10px; border: none; border-radius: 5px; cursor: pointer; margin-top: 10px; width: 100%; font-size: 16px;}
+    </style>
+</head>
+<body>
+    <div id="lobby">
+        <h2>Онлайн Угадай Кто</h2>
+        <button class="btn" onclick="createGame()">Создать игру</button>
+        <input type="text" id="joinId" placeholder="Введите код комнаты" style="width: 100%; padding: 10px; margin-top: 10px; box-sizing: border-box;">
+        <button class="btn" onclick="joinGame()">Присоединиться</button>
+    </div>
+
+    <div id="game" class="hidden">
+        <div id="hint" style="text-align: center; margin-bottom: 10px;">Ожидание игроков...</div>
+        <div id="board" class="grid"></div>
+        <div id="chat"></div>
+        <div id="controls" class="hidden" style="margin-top: 10px;">
+            <input type="text" id="msg" placeholder="Введите вопрос..." style="width: 100%; padding: 8px; box-sizing: border-box;">
+            <button class="btn" onclick="sendMsg()">Отправить</button>
         </div>
+    </div>
 
-        <div id="game" class="hidden">
-            <div id="hint" style="text-align: center; margin-bottom: 10px;">Ожидание игроков...</div>
-            <div id="board" class="grid"></div>
-            <div id="chat"></div>
-            <div id="controls" class="hidden" style="margin-top: 10px;">
-                <input type="text" id="msg" placeholder="Введите вопрос..." style="width: 100%; padding: 8px; box-sizing: border-box;">
-                <button class="btn" onclick="sendMsg()">Отправить</button>
-            </div>
-        </div>
+    <script>
+        const tg = window.Telegram.WebApp;
+        tg.ready(); tg.expand();
 
-        <script>
-            const tg = window.Telegram.WebApp;
-            tg.ready(); tg.expand();
+        const players = ["s1mple", "ZywOo", "NiKo", "donk", "m0NESY", "Magisk", "Snax", "hades"];
+        let ws;
+        let myRole;
+        let roomId;
 
-            const players = ["s1mple", "ZywOo", "NiKo", "donk", "m0NESY", "Magisk", "Snax", "hades"];
-            let ws;
-            let myRole;
-            let roomId;
-
-            function renderBoard() {
-                const board = document.getElementById('board');
-                board.innerHTML = '';
-                players.forEach(name => {
-                    let card = document.createElement('div');
-                    card.className = 'card';
-                    card.innerHTML = `<img src="https://ui-avatars.com/api/?name=${name}&background=random&color=fff&size=100"><br>${name}`;
-                    card.onclick = () => {
-                        if (myRole === 'p2') {
-                            ws.send(JSON.stringify({type: "set_target", target: name}));
-                            document.getElementById('hint').innerText = "Вы загадали: " + name;
-                        } else {
-                            ws.send(JSON.stringify({type: "guess", player: name}));
-                        }
-                    };
-                    board.appendChild(card);
-                });
-            }
-
-            function createGame() {
-                roomId = Math.floor(1000 + Math.random() * 9000).toString();
-                localStorage.setItem('role', 'p1');
-                connectWS('p1');
-            }
-
-            function joinGame() {
-                roomId = document.getElementById('joinId').value;
-                if (!roomId) return alert("Введите код");
-                localStorage.setItem('role', 'p2');
-                connectWS('p2');
-            }
-
-            function connectWS(role) {
-                myRole = role;
-                document.getElementById('lobby').classList.add('hidden');
-                document.getElementById('game').classList.remove('hidden');
-                document.getElementById('hint').innerText = `Код комнаты: ${roomId}. Ожидание...`;
-                renderBoard();
-
-                ws = new WebSocket(`wss://${window.location.host}/ws/${roomId}/${role}`);
-                
-                ws.onmessage = (event) => {
-                    const data = JSON.parse(event.data);
-                    
-                    if (data.type === 'start') {
-                        document.getElementById('hint').innerText = "Игра началась!";
-                        if (myRole === 'p1') {
-                            document.getElementById('controls').classList.remove('hidden');
-                            document.getElementById('hint').innerText = "Задавай вопросы в чате и угадывай!";
-                        } else {
-                            document.getElementById('hint').innerText = "Загадай персонажа (нажми на карточку)!";
-                        }
-                    }
-                    
-                    if (data.type === 'chat') {
-                        const chat = document.getElementById('chat');
-                        chat.innerHTML += `<div><b>${data.sender}:</b> ${data.text}</div>`;
-                        chat.scrollTop = chat.scrollHeight;
-                    }
-
-                    if (data.type === 'result') {
-                        if (data.win) {
-                            document.getElementById('hint').innerText = "✅ Победа! Персонаж был: " + data.target;
-                        } else {
-                            document.getElementById('hint').innerText = "❌ Проигрыш. Персонаж был: " + data.target;
-                        }
+        function renderBoard() {
+            const board = document.getElementById('board');
+            board.innerHTML = '';
+            players.forEach(name => {
+                let card = document.createElement('div');
+                card.className = 'card';
+                card.innerHTML = `<img src="https://ui-avatars.com/api/?name=${name}&background=random&color=fff&size=100"><br>${name}`;
+                card.onclick = () => {
+                    if (myRole === 'p2') {
+                        ws.send(JSON.stringify({type: "set_target", target: name}));
+                        document.getElementById('hint').innerText = "Вы загадали: " + name;
+                    } else {
+                        ws.send(JSON.stringify({type: "guess", player: name}));
                     }
                 };
-            }
+                board.appendChild(card);
+            });
+        }
 
-            function sendMsg() {
-                const text = document.getElementById('msg').value;
-                if (!text) return;
-                ws.send(JSON.stringify({type: "chat", text: text, sender: myRole === 'p1' ? "Вы" : "Противник"}));
-                document.getElementById('chat').innerHTML += `<div><b>Вы:</b> ${text}</div>`;
-                document.getElementById('msg').value = '';
-            }
-        </script>
-    </body>
-    </html>
-    """
-    return HTMLResponse(content=html_content, status_code=200)
-    @app.get("/{path:path}")
+        function createGame() {
+            roomId = Math.floor(1000 + Math.random() * 9000).toString();
+            localStorage.setItem('role', 'p1');
+            connectWS('p1');
+        }
+
+        function joinGame() {
+            roomId = document.getElementById('joinId').value;
+            if (!roomId) return alert("Введите код");
+            localStorage.setItem('role', 'p2');
+            connectWS('p2');
+        }
+
+        function connectWS(role) {
+            myRole = role;
+            document.getElementById('lobby').classList.add('hidden');
+            document.getElementById('game').classList.remove('hidden');
+            document.getElementById('hint').innerText = `Код комнаты: ${roomId}. Ожидание...`;
+            renderBoard();
+
+            ws = new WebSocket(`wss://${window.location.host}/ws/${roomId}/${role}`);
+            
+            ws.onmessage = (event) => {
+                const data = JSON.parse(event.data);
+                
+                if (data.type === 'start') {
+                    document.getElementById('hint').innerText = "Игра началась!";
+                    if (myRole === 'p1') {
+                        document.getElementById('controls').classList.remove('hidden');
+                        document.getElementById('hint').innerText = "Задавай вопросы в чате и угадывай!";
+                    } else {
+                        document.getElementById('hint').innerText = "Загадай персонажа (нажми на карточку)!";
+                    }
+                }
+                
+                if (data.type === 'chat') {
+                    const chat = document.getElementById('chat');
+                    chat.innerHTML += `<div><b>${data.sender}:</b> ${data.text}</div>`;
+                    chat.scrollTop = chat.scrollHeight;
+                }
+
+                if (data.type === 'result') {
+                    if (data.win) {
+                        document.getElementById('hint').innerText = "✅ Победа! Персонаж был: " + data.target;
+                    } else {
+                        document.getElementById('hint').innerText = "❌ Проигрыш. Персонаж был: " + data.target;
+                    }
+                }
+            };
+        }
+
+        function sendMsg() {
+            const text = document.getElementById('msg').value;
+            if (!text) return;
+            ws.send(JSON.stringify({type: "chat", text: text, sender: myRole === 'p1' ? "Вы" : "Противник"}));
+            document.getElementById('chat').innerHTML += `<div><b>Вы:</b> ${text}</div>`;
+            document.getElementById('msg').value = '';
+        }
+    </script>
+</body>
+</html>
+"""
+
+@app.get("/")
+async def get():
+    return HTMLResponse(content=HTML_CONTENT, status_code=200)
+
+@app.get("/{path:path}")
 async def catch_all(path: str):
-    return await get()
-
-async def run_bot():
-    await dp.start_polling(bot)
-
-from contextlib import asynccontextmanager
-
-@asynccontextmanager
-async def lifespan(app: FastAPI):
-    # Запускаем бота при старте
-    asyncio.create_task(run_bot())
-    yield
-    # Тут можно добавить код, который выполнится при остановке
-
-app = FastAPI(lifespan=lifespan)
+    return HTMLResponse(content=HTML_CONTENT, status_code=200)
 
 if __name__ == "__main__":
     port = int(os.environ.get("PORT", 8080))
