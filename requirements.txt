@@ -1,4 +1,4 @@
 aiogram
 fastapi
-uvicorn
+uvicorn==0.29.0
 websockets
