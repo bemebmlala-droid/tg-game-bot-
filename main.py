@@ -10,7 +10,7 @@ from aiogram.types import Message, InlineKeyboardMarkup, InlineKeyboardButton, W
 
 # ================= НАСТРОЙКИ =================
 BOT_TOKEN = os.environ.get("BOT_TOKEN")
-APP_URL = os.environ.get("RENDER_EXTERNAL_URL", "https://ваш-сервис.onrender.com")
+APP_URL = "https://tg-game-bot-4.onrender.com"
 
 bot = Bot(token=BOT_TOKEN)
 dp = Dispatcher()
