@@ -16,7 +16,7 @@ async def cmd_start(message: Message):
 
 @dp.callback_query(F.data.startswith("game_"))
 async def process_game_callback(call: CallbackQuery):
-    game_url = "https://example.com" 
+    game_url = game_url = "https://tg-game-bot.pages.dev/"
     
     await bot.answer_game(
         game_short_name=GAME_SHORT_NAME,
