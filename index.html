@@ -27,7 +27,7 @@
         players.sort(() => 0.5 - Math.random()).forEach(name => {
             let card = document.createElement('div');
             card.className = 'card';
-            card.innerHTML = `<img src="https://via.placeholder.com/100"><br>${name}`;
+            card.innerHTML = `<img src="https://ui-avatars.com/api/?name=${name}&background=random&color=fff&size=100"><br>${name}`;
             card.onclick = () => {
                 if (name === target) {
                     card.classList.add('correct');
