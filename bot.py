@@ -30,4 +30,15 @@ async def main():
     await dp.start_polling(bot)
 
 if __name__ == "__main__":
-    asyncio.run(main())
+    asyncio.run(main()) import os
+from http.server import BaseHTTPRequestHandler, HTTPServer
+import threading
+
+# --- Заглушка для Render (чтобы не было ошибки портов) ---
+def run_dummy_server():
+    port = int(os.environ.get("PORT", 8080))
+    server = HTTPServer(('0.0.0.0', port), BaseHTTPRequestHandler)
+    server.serve_forever()
+
+threading.Thread(target=run_dummy_server, daemon=True).start()
+# ---------------------------------------------------------
