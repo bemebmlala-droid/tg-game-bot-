@@ -199,6 +199,9 @@ async def get():
     </html>
     """
     return HTMLResponse(content=html_content, status_code=200)
+    @app.get("/{path:path}")
+async def catch_all(path: str):
+    return await get()
 
 async def run_bot():
     await dp.start_polling(bot)
