@@ -17,24 +17,30 @@
 <body>
     <div class="hint" id="hint">Найди игрока s1mple</div>
     <div class="grid" id="grid"></div>
+    
     <script>
+        // Инициализация Telegram Web App
         const tg = window.Telegram.WebApp;
-tg.ready();
-tg.expand();
+        tg.ready();
+        tg.expand();
+
         const players = ["s1mple", "ZywOo", "NiKo", "donk", "m0NESY", "Magisk", "Snax", "hades"];
         let target = "s1mple";
         
         const grid = document.getElementById('grid');
+        
         players.sort(() => 0.5 - Math.random()).forEach(name => {
             let card = document.createElement('div');
             card.className = 'card';
             card.innerHTML = `<img src="https://ui-avatars.com/api/?name=${name}&background=random&color=fff&size=100"><br>${name}`;
+            
             card.onclick = () => {
                 if (name === target) {
                     card.classList.add('correct');
-                    tg.HapticFeedback.notificationOccurred('success');
                     document.getElementById('hint').innerText = "✅ Верно!";
-                    tg.sendData(JSON.stringify({win: true}));
+                    
+                    // Отправляем данные в бота и закрываем окошко
+                    tg.sendData(JSON.stringify({win: true, player: name}));
                 } else {
                     card.classList.add('wrong');
                     tg.HapticFeedback.notificationOccurred('error');
