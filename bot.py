@@ -32,15 +32,19 @@ async def main():
 if __name__ == "__main__":
     asyncio.run(main()) 
 
-import os 
-from http.server import BaseHTTPRequestHandler, HTTPServer
+import os
+from flask import Flask
 import threading
 
-# --- Заглушка для Render (чтобы не было ошибки портов) ---
-def run_dummy_server():
-    port = int(os.environ.get("PORT", 8080))
-    server = HTTPServer(('0.0.0.0', port), BaseHTTPRequestHandler)
-    server.serve_forever()
+app = Flask(__name__)
 
-threading.Thread(target=run_dummy_server, daemon=True).start()
+@app.route('/')
+def home():
+    return "Bot is alive!"
+
+def run_flask():
+    port = int(os.environ.get("PORT", 8080))
+    app.run(host='0.0.0.0', port=port)
+
+threading.Thread(target=run_flask, daemon=True).start()
 # ---------------------------------------------------------
