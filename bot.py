@@ -3,6 +3,8 @@ import os
 from aiogram import Bot, Dispatcher, F
 from aiogram.filters import Command
 from aiogram.types import Message, CallbackQuery
+from flask import Flask
+import threading
 
 BOT_TOKEN = os.environ.get("BOT_TOKEN")
 GAME_SHORT_NAME = "guess_game_bot"
@@ -29,13 +31,7 @@ async def main():
     print("Бот запущен...")
     await dp.start_polling(bot)
 
-if __name__ == "__main__":
-    asyncio.run(main()) 
-
-import os
-from flask import Flask
-import threading
-
+# --- ЗАПУСК FLASK (ДО БОТА) ---
 app = Flask(__name__)
 
 @app.route('/')
@@ -47,4 +43,7 @@ def run_flask():
     app.run(host='0.0.0.0', port=port)
 
 threading.Thread(target=run_flask, daemon=True).start()
-# ---------------------------------------------------------
+# ------------------------------
+
+if __name__ == "__main__":
+    asyncio.run(main())
